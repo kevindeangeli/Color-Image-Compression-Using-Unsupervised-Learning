@@ -15,7 +15,6 @@ def readData(showWxample=False):
     #pixels = list(img.getdata())
     #img = Image.open('example2.JPG')
     img = Image.open('pictureData.ppm')
-    print(type(img))
     X = np.array(img)  # 120x120x3 Data
     picShape =[]
     picShape.append(X.shape[0])
@@ -64,7 +63,6 @@ class K_means(object):
         #could put low= 0 , high= 256. But I wanted ti try this
         #self.C = [np.random.randint(low=np.amin(self.X), high= np.amax(self.X), size=self.X.shape[1]) for i in range(k)]
         self.C = [np.random.randint(low=0, high= 256, size=self.X.shape[1]) for i in range(k)]
-
         self.C = np.array(self.C)
         #self.C = self.C.reshape((k,self.X.shape[1]))
 
@@ -83,6 +81,10 @@ class K_means(object):
 
 
     def finishLoopCheck(self, oldClusters, iterationsLim):
+        '''
+        Stop the program if the clusters' position stop changing or
+        the limit number of iterations has been reached.
+        '''
         if iterationsLim == self.iterations:
             return True
         else:
@@ -128,7 +130,7 @@ class K_means(object):
 
         for i in range(self.C.shape[0]):
             if i not in clusterAssignments:
-                print("Not there: ", i)
+                print("Empty Cluster: ", i)
                 self.reInitializeEmptyClusters(CIndex= i)
                 continue
             findDataPoints = clusterAssignments == i
@@ -151,17 +153,128 @@ class K_means(object):
 
         return self.X
 
+class WinnerTakeAll(object):
 
+    def __init__(self, data):
+        self.X = data
+        self.C = 0
+        self.iterations = 0
+        self.epselon = 0
+
+    def finishLoopCheck(self, oldClusters, iterationsLim):
+        '''
+        Stop the program if the clusters' position stop changing or
+        the limit number of iterations has been reached.
+        '''
+        if iterationsLim == self.iterations:
+            return True
+        else:
+            return np.array_equal(oldClusters, self.C) #Clusters didn't change ?
+
+    def closestCluster(self, testPoint):
+        '''
+        Compute euclidian distance of a testPoit to each of the clusters.
+        Return the index of the closest cluster.
+        '''
+        dist = []
+        for i in range(self.C.shape[0]):
+            dist.append(np.linalg.norm(self.C[i] - testPoint))
+            min = np.amin(dist)
+            WinnerIndex = dist.index(min)
+
+        return  WinnerIndex
+
+
+
+    def clustersUpdate(self):
+        '''
+        For each data point. Find the closet cluster (function closestCluster)
+        and update the position of the cluster based on W_new = W_old + epselon( X - W_old)
+        '''
+        newClusterCoordinate=[]
+        #update self.C based on clusterAssignments
+
+        for k in self.X:
+            winnerCluster = self.closestCluster(k)
+            newClusterCoordinate = self.C[winnerCluster] + self.epselon*(k - self.C[winnerCluster])
+            self.C[winnerCluster] = newClusterCoordinate
+
+
+    def train(self, k, iterrationsLimit = -1, epselon=0.1):
+        '''
+        Randomly initialize clusters and then update them.
+        '''
+        self.epselon = epselon
+        self.C = k
+        self.C = [np.random.randint(low=0, high=256, size=self.X.shape[1]) for i in range(k)]
+        self.C = np.array(self.C)
+        C_old = [] #old clusters. Used to check if they stopped changing.
+
+        while not self.finishLoopCheck(oldClusters=C_old, iterationsLim=iterrationsLimit):
+            print("Iteration: ", self.iterations)
+            C_old = copy.deepcopy(self.C)  # To copy C by value not by reference
+            #dataAssignment = self.closestCluster()
+            self.clustersUpdate()
+            self.iterations += 1
+
+
+    def closestClusterForMerging(self):
+        '''
+        Create a list where each data point is associated with a
+        cluster. Then it returns the list of clusters.
+        This is used to create the final picture.
+        Once the cluster position are set, assign the coordinate of
+        the cluster to each of the the data points that are close.
+        '''
+        clusterAssignment = []
+        for i in self.X:    #For each dataPoint
+            dist = []
+            for k in self.C: #For each cluster.
+                dist.append(np.linalg.norm(i-k))
+            min = np.amin(dist)
+            index = dist.index(min)
+            clusterAssignment.append(index)
+
+        #return a list of size X where each element specifies the cluster.
+        return  np.array(clusterAssignment)
+
+    def mergeDataPoints(self):
+        '''
+        This function change the value of the
+        data points based on the value of the closest neighboor.
+        '''
+        dataAssignment = self.closestClusterForMerging()
+
+        for i in range(self.C.shape[0]):
+            selectPoints = dataAssignment == i
+            self.X[selectPoints] = self.C[i]
+
+        return self.X
+
+class KohonenMaps(object):
+
+    def __init__(self):
+        a=2
 
 
 
 def main():
-    data, picShape = readData(showWxample=True)
+    data, picShape = readData(showWxample=False)
 
+    '''
+    
     kMeans = K_means(data)
-    kMeans.train(k=20, iterationsLimit= 3)
+    kMeans.train(k=128, iterationsLimit= 10)
     newImage = kMeans.mergeDataPoints()
     displayPicture(newImage,picShape )
+    '''
+
+
+
+    winner_take_all = WinnerTakeAll(data)
+    winner_take_all.train(k=128, iterrationsLimit= 10, epselon = 0.1)
+    newImage2 = winner_take_all.mergeDataPoints()
+    displayPicture(newImage2, picShape)
 
 
 
