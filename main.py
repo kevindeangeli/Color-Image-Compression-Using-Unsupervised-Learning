@@ -154,7 +154,6 @@ class K_means(object):
         return self.X
 
 class WinnerTakeAll(object):
-
     def __init__(self, data):
         self.X = data
         self.C = 0
@@ -272,7 +271,7 @@ def main():
 
 
     winner_take_all = WinnerTakeAll(data)
-    winner_take_all.train(k=128, iterrationsLimit= 10, epselon = 0.1)
+    winner_take_all.train(k=100, iterrationsLimit= 10, epselon = 0.15) #.1 works
     newImage2 = winner_take_all.mergeDataPoints()
     displayPicture(newImage2, picShape)
 
