@@ -139,7 +139,6 @@ class K_means(object):
             newClusterCoordinate = np.average(dataPointsCoordinates,axis=0)
             self.C[i] = newClusterCoordinate
 
-
     def mergeDataPoints(self):
         '''
         This function change the value of the
@@ -252,28 +251,185 @@ class WinnerTakeAll(object):
 
 class KohonenMaps(object):
 
-    def __init__(self):
-        a=2
+    def __init__(self, data):
+        self.X = data
+        self.xmax= None
+        self.ymax= None
+        self.learningRate = None
+        self.currentEpoch = 1
+        self.learnRateFunc = self.timeInverse
+        self.totalEpochs = None
+        self.C = None #It contains a dic where keys are 2D-grid coordinates, and values are points in the data space.
+
+
+    def train(self,xmax=10, ymax=10, epochs=4,  learningRate = "time inverse"):
+        self.xmax= xmax
+        self.ymax= ymax
+        self.totalEpochs = epochs
+        self.learningRate = learningRate
+        if learningRate == "time proportional":
+            self.learnRateFunc = self.timeProportional
+
+        self.initializeGrid()
+
+
+        for i in self.X:
+
+            clusters = np.array(list(self.C.values()))
+            gridCoordinates = np.array(list(self.C.keys()))
+
+            winnerIndex = self.findWinnerNeuron(i, clusters)
+            self.updateClusters(gridCoordinates[winnerIndex],clusters[winnerIndex],i)
+
+
+    def updateClusters(self, winnerCoordinates, clusterCoordiante, testPoint):
+
+
+        winnerCoordinates = np.array(winnerCoordinates)
+        coordinateDifference = testPoint - clusterCoordiante[0]
+
+        for i in range(self.xmax):
+            for j in range(self.ymax):
+                clusterGridCoordinate = np.array([i,j])
+                gridDistance = np.sum(np.abs(winnerCoordinates-clusterGridCoordinate))
+                newCoordinates = self.updateCordinates((i,j),gridDistance,coordinateDifference)
+                self.C[(i,j)] = newCoordinates
+
+    def updateCordinates(self, coordinate, gridDistance,coordinateDifference):
+        #add diferenece as a parameter.
+        value = self.C[coordinate]
+        newVal = value + (self.learnRateFunc()* (1/np.exp(gridDistance/2))*coordinateDifference)
+        return newVal
+
+
+
+
+    def findWinnerNeuron(self, testPoint,clusters):
+        '''
+        Compute euclidian distance of a testPoit to each of the clusters.
+        Return the index of the closest cluster.
+        '''
+        dist = []
+        for i in range(clusters.shape[0]):
+            dist.append(np.linalg.norm(clusters[i] - testPoint))
+        min = np.amin(dist)
+        #print(dist)
+        WinnerIndex = dist.index(min)
+        return WinnerIndex #coordinates of the winner
+
+
+    def initializeGrid(self):
+        '''
+        Create a grid dictionary where the key is the value in a
+        2D matric (i,j), and the key is the coordinates of that point.
+        '''
+        totalNeurons = self.xmax*self.ymax
+        #initialClusters = np.array([np.random.randint(low=0, high= 256, size=self.X.shape[1]) for i in range(totalNeurons)])
+
+        #Create mapping dictionary from grid to coordinates:
+        self.C = {}
+        for i in range(self.xmax):
+            for j in range(self.ymax):
+                key = (i,j)
+                value = np.array([np.random.randint(low=0, high= 256, size=self.X.shape[1])])
+                self.C[key] = value
+
+
+        #print(self.C)
+        #print(len(self.C))
+        #vals = np.array(list(self.C.values()))
+
+        #print(self.C)
+        #print(vals[3])
+
+    def mergeDataPoints(self):
+        '''
+        This function change the value of the
+        data points based on the value of the closest neighboor.
+        '''
+        clusters = np.array(list(self.C.values()))
+
+        dataAssignment = self.closestCluster(clusters)
+
+        for i in range(clusters.shape[0]):
+            selectPoints = dataAssignment == i
+            self.X[selectPoints] = clusters[i]
+        return self.X
+
+    def closestCluster(self, clusters):
+        '''
+        Create a list where each data point is associated with a
+        clusters. Then it returns the list of clusters.
+        '''
+        clusterAssignment = []
+        for i in self.X:  # For each dataPoint
+            dist = []
+            for k in clusters:  # For each cluster.
+                dist.append(np.linalg.norm(i - k))
+            min = np.amin(dist)
+            index = dist.index(min)
+            clusterAssignment.append(index)
+
+        # return a list of size X where each element specifies the cluster.
+        return np.array(clusterAssignment)
+
+
+
+
+
+    def timeInverse(self):
+        return (.9) ** (self.currentEpoch)
+
+    def timeProportional(self):
+        return (1 - (self.currentEpoch / self.totalEpochs))
+
+
+
+def MSE(A,B):
+    mse = np.subtract(A.astype(np.int16), B.astype(np.int16))
+    mse = mse**2
+    mse = np.sum(mse) / A.shape[0]
+    return mse
+
+def PSNR(A,B):
+    mse = MSE(A,B)
+    return 20 * np.log10(255/np.sqrt(mse))
 
 
 
 def main():
     data, picShape = readData(showWxample=False)
+    originalPic, picShape = readData(showWxample=False)
 
-    '''
-    
+    SOM = KohonenMaps(data)
+    SOM.train(xmax=10, ymax=10, epochs=2, learningRate="time inverse")
+    newImage3 = SOM.mergeDataPoints()
+    displayPicture(newImage3,picShape )
+
+
+
+'''
     kMeans = K_means(data)
     kMeans.train(k=128, iterationsLimit= 10)
-    newImage = kMeans.mergeDataPoints()
-    displayPicture(newImage,picShape )
-    '''
+    newImage0 = kMeans.mergeDataPoints()
+    #displayPicture(newImage0,picShape )
+    print(MSE(originalPic,newImage0))
+    print(PSNR(originalPic,newImage0))
+'''
 
 
 
+'''
+    data, picShape = readData(showWxample=False)
     winner_take_all = WinnerTakeAll(data)
-    winner_take_all.train(k=100, iterrationsLimit= 10, epselon = 0.15) #.1 works
+    winner_take_all.train(k=128, iterrationsLimit= 3, epselon = 0.15) #.1 works
     newImage2 = winner_take_all.mergeDataPoints()
     displayPicture(newImage2, picShape)
+    print(MSE(originalPic,newImage2))
+    print(PSNR(originalPic,newImage2))
+'''
+
+
 
 
 
