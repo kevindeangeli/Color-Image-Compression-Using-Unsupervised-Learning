@@ -10,6 +10,7 @@ import sympy as sym
 from PIL import Image
 import random
 import copy
+from sklearn.cluster import MeanShift
 
 def readData(showWxample=False):
     #pixels = list(img.getdata())
@@ -272,18 +273,23 @@ class KohonenMaps(object):
 
         self.initializeGrid()
 
+        for k in range(self.totalEpochs): #for each epoch
+            for i in self.X: #For each data point
+                clusters = np.array(list(self.C.values()))
+                gridCoordinates = np.array(list(self.C.keys()))
 
-        for i in self.X:
-
-            clusters = np.array(list(self.C.values()))
-            gridCoordinates = np.array(list(self.C.keys()))
-
-            winnerIndex = self.findWinnerNeuron(i, clusters)
-            self.updateClusters(gridCoordinates[winnerIndex],clusters[winnerIndex],i)
+                winnerIndex = self.findWinnerNeuron(i, clusters)
+                self.updateClusters(gridCoordinates[winnerIndex],clusters[winnerIndex],i)
+                self.currentEpoch+=1
 
 
     def updateClusters(self, winnerCoordinates, clusterCoordiante, testPoint):
-
+        '''
+        Based on the winner, update all the clusters.
+        :param winnerCoordinates:
+        :param clusterCoordiante:
+        :param testPoint:
+        '''
 
         winnerCoordinates = np.array(winnerCoordinates)
         coordinateDifference = testPoint - clusterCoordiante[0]
@@ -296,6 +302,19 @@ class KohonenMaps(object):
                 self.C[(i,j)] = newCoordinates
 
     def updateCordinates(self, coordinate, gridDistance,coordinateDifference):
+        '''
+        Update the cluster based on the eqution:
+        W_k+1 = W_k + LearRateFunc()*Neighborhood Function
+        Here, the neighbordhood function used is 1/exp(gridDifference/2)
+        Note that all clusters are being updated, but the farthest away in the
+        2D grid are not being affected much. Some paper use the "radio" idea
+        to identify which ones should be updated.
+
+        :param coordinate: 2D grid coordinate
+        :param gridDistance: 2D grid distance
+        :param coordinateDifference: Difference between the winner cluster and the test point
+        :return:
+        '''
         #add diferenece as a parameter.
         value = self.C[coordinate]
         newVal = value + (self.learnRateFunc()* (1/np.exp(gridDistance/2))*coordinateDifference)
@@ -335,12 +354,7 @@ class KohonenMaps(object):
                 self.C[key] = value
 
 
-        #print(self.C)
-        #print(len(self.C))
-        #vals = np.array(list(self.C.values()))
 
-        #print(self.C)
-        #print(vals[3])
 
     def mergeDataPoints(self):
         '''
@@ -358,8 +372,9 @@ class KohonenMaps(object):
 
     def closestCluster(self, clusters):
         '''
+        This function is called by mergeDataPoints only. (for this class)
         Create a list where each data point is associated with a
-        clusters. Then it returns the list of clusters.
+        clusters (closest). Then it returns the list of clusters.
         '''
         clusterAssignment = []
         for i in self.X:  # For each dataPoint
@@ -376,22 +391,39 @@ class KohonenMaps(object):
 
 
 
-
     def timeInverse(self):
+        '''
+        One of the Learning rate functions
+        :return: (.9)**k
+        '''
         return (.9) ** (self.currentEpoch)
 
     def timeProportional(self):
+        '''
+        One of the Learning rate functions
+        :return: (1-k/K)
+        '''
         return (1 - (self.currentEpoch / self.totalEpochs))
 
 
 
 def MSE(A,B):
+    '''
+    :param A: array of pixels of image 1
+    :param B: array of pixels of image 2
+    :return: Mean Square Value.
+    '''
     mse = np.subtract(A.astype(np.int16), B.astype(np.int16))
     mse = mse**2
     mse = np.sum(mse) / A.shape[0]
     return mse
 
 def PSNR(A,B):
+    '''
+    :param A: array of pixels of image 1
+    :param B: array of pixels of image 2
+    :return: PSNR score.
+    '''
     mse = MSE(A,B)
     return 20 * np.log10(255/np.sqrt(mse))
 
@@ -400,39 +432,50 @@ def PSNR(A,B):
 def main():
     data, picShape = readData(showWxample=False)
     originalPic, picShape = readData(showWxample=False)
-
-    SOM = KohonenMaps(data)
-    SOM.train(xmax=10, ymax=10, epochs=2, learningRate="time inverse")
-    newImage3 = SOM.mergeDataPoints()
-    displayPicture(newImage3,picShape )
+    print(picShape)
 
 
 
-'''
+
+    '''
     kMeans = K_means(data)
-    kMeans.train(k=128, iterationsLimit= 10)
+    kMeans.train(k=16, iterationsLimit= 10)
     newImage0 = kMeans.mergeDataPoints()
-    #displayPicture(newImage0,picShape )
+    displayPicture(newImage0,picShape )
     print(MSE(originalPic,newImage0))
     print(PSNR(originalPic,newImage0))
-'''
+    '''
 
 
 
-'''
-    data, picShape = readData(showWxample=False)
+    '''
+    #data, picShape = readData(showWxample=False)
     winner_take_all = WinnerTakeAll(data)
-    winner_take_all.train(k=128, iterrationsLimit= 3, epselon = 0.15) #.1 works
+    winner_take_all.train(k=16, iterrationsLimit= 10, epselon = 0.18) #.1 works
     newImage2 = winner_take_all.mergeDataPoints()
     displayPicture(newImage2, picShape)
     print(MSE(originalPic,newImage2))
     print(PSNR(originalPic,newImage2))
-'''
+    '''
 
 
+    '''
+    SOM = KohonenMaps(data)
+    SOM.train(xmax=4, ymax=4, epochs=5, learningRate="time inverse")
+    newImage3 = SOM.mergeDataPoints()
+    displayPicture(newImage3,picShape)
+    print(MSE(originalPic,newImage3))
+    print(PSNR(originalPic,newImage3))
+    '''
 
-
-
+    bandwidth=10
+    ms = MeanShift(bandwidth=bandwidth, bin_seeding=True)
+    ms.fit(data)
+    labels = ms.labels_
+    cluster_centers = ms.cluster_centers_
+    labels_unique = np.unique(labels)
+    n_clusters_ = len(labels_unique)
+    print("With a bandwidth of size: ", bandwidth, "Number of clusters: ", n_clusters_)
 
 if __name__ == "__main__":
     main()
